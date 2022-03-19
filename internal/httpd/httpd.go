@@ -104,6 +104,7 @@ type DirResponse struct {
 var DirTemplate = template.Must(template.New("dir").Parse(`<HTML>
 <TITLE>Index of {{ .Path }}</TITLE>
 <UL>
+<LI>.</LI>
 {{ range .Files }}<LI><A HREF="{{.Name}}">{{.Name}}{{if .IsDir }}/{{end}}</A></LI>{{end}}
 </UL>
 </HTML>`))
@@ -126,7 +127,7 @@ func (dr *DirResponse) WriteTo(w io.Writer) (int, error) {
 		}
 
 		dl := dirListing{
-			Path: dr.path,
+			Path: dr.path+"/",
 			Files: ents,
 		}
 
@@ -165,6 +166,8 @@ func (h *Httpd) makeRequest(p string) Response {
 			return &FileResponse{
 				File: f,
 			}
+		} else {
+			rPath = strings.TrimSuffix(rPath, "/")
 		}
 	}
 
@@ -193,6 +196,7 @@ func (h *Httpd) makeRequest(p string) Response {
 		if fsi.IsDir() {
 			return &DirResponse{
 				File: f,
+				path: rPath,
 			}
 		} else {
 			return &FileResponse{
