@@ -1,6 +1,7 @@
 package httpd
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
 	"log"
@@ -87,6 +88,11 @@ func (h *Httpd) serveGet(c net.Conn, rPath string) error {
 	}
 	f, err := h.r.Open(rPath)
 	if err != nil {
+		switch e := err.(type) {
+		case *os.PathError:
+			fmt.Fprintf(c, "Not found: %s", e.Path)
+		}
+
 		return err
 	}
 
