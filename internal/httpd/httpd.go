@@ -14,7 +14,7 @@ import (
 type Httpd struct {
 	net.Listener
 
-	r fs.FS // the directory to root
+	r    fs.FS  // the directory to root
 	Addr string // the address to listen to
 }
 
@@ -26,8 +26,8 @@ func NewHTTPd(addr, root string) (*Httpd, error) {
 
 	h := &Httpd{
 		Listener: l,
-		Addr: addr,
-		r: os.DirFS(root),
+		Addr:     addr,
+		r:        os.DirFS(root),
 	}
 
 	return h, nil
@@ -110,7 +110,7 @@ var DirTemplate = template.Must(template.New("dir").Parse(`<HTML>
 </HTML>`))
 
 type dirListing struct {
-	Path string
+	Path  string
 	Files []fs.DirEntry
 }
 
@@ -127,7 +127,7 @@ func (dr *DirResponse) WriteTo(w io.Writer) (int, error) {
 		}
 
 		dl := dirListing{
-			Path: dr.path+"/",
+			Path:  dr.path + "/",
 			Files: ents,
 		}
 
@@ -140,7 +140,7 @@ func (dr *DirResponse) WriteTo(w io.Writer) (int, error) {
 
 type ErrorResponse struct {
 	Path string
-	Err error
+	Err  error
 }
 
 func (er *ErrorResponse) Close() error { return nil }
@@ -182,7 +182,7 @@ func (h *Httpd) makeRequest(p string) Response {
 
 		return &ErrorResponse{
 			Path: p,
-			Err: err,
+			Err:  err,
 		}
 	}
 
@@ -190,7 +190,7 @@ func (h *Httpd) makeRequest(p string) Response {
 	if err != nil {
 		return &ErrorResponse{
 			Path: p,
-			Err: err,
+			Err:  err,
 		}
 	} else {
 		if fsi.IsDir() {
