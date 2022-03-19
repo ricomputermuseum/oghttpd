@@ -2,6 +2,7 @@ package httpd
 
 import (
 	"fmt"
+	"html/template"
 	"io"
 	"io/fs"
 	"log"
@@ -81,26 +82,132 @@ func (h *Httpd) handle(c net.Conn) {
 	}
 }
 
-func (h *Httpd) serveGet(c net.Conn, rPath string) error {
-	rPath = strings.TrimPrefix(rPath, "/")
-	if rPath == "" {
-		rPath = "index.html"
-	}
-	f, err := h.r.Open(rPath)
+type FileResponse struct {
+	fs.File
+}
+
+func (fr *FileResponse) WriteTo(w io.Writer) (int, error) {
+	sz, err := io.Copy(w, fr.File)
+
 	if err != nil {
-		switch e := err.(type) {
-		case *os.PathError:
-			fmt.Fprintf(c, "Not found: %s", e.Path)
+		log.Printf("file write: %s", err.Error())
+	}
+
+	return int(sz), err
+}
+
+type DirResponse struct {
+	fs.File
+	path string
+}
+
+var DirTemplate = template.Must(template.New("dir").Parse(`<HTML>
+<TITLE>Index of {{ .Path }}</TITLE>
+<UL>
+{{ range .Files }}<LI><A HREF="{{.Name}}">{{.Name}}{{if .IsDir }}/{{end}}</A></LI>{{end}}
+</UL>
+</HTML>`))
+
+type dirListing struct {
+	Path string
+	Files []fs.DirEntry
+}
+
+func (dr *DirResponse) WriteTo(w io.Writer) (int, error) {
+	var err error
+	var written int
+	if dir, isDir := dr.File.(fs.ReadDirFile); isDir {
+		ents, err := dir.ReadDir(-1)
+		if err != nil {
+			er := &ErrorResponse{
+				Err: err,
+			}
+			return er.WriteTo(w)
 		}
 
-		return err
+		dl := dirListing{
+			Path: dr.path,
+			Files: ents,
+		}
+
+		return -1, DirTemplate.Execute(w, dl)
+	} else {
+		panic("is not dir!")
+	}
+	return written, err
+}
+
+type ErrorResponse struct {
+	Path string
+	Err error
+}
+
+func (er *ErrorResponse) Close() error { return nil }
+
+func (er *ErrorResponse) WriteTo(w io.Writer) (int, error) {
+	if er.Err == nil {
+		return fmt.Fprintf(w, "Not found: %s", er.Path)
+	} else {
+		return fmt.Fprintf(w, "Error: %s", er.Err.Error())
+	}
+}
+
+type Response interface {
+	WriteTo(io.Writer) (int, error)
+	io.Closer
+}
+
+func (h *Httpd) makeRequest(p string) Response {
+	rPath := strings.TrimLeft(p, "/")
+	if rPath == "" || strings.HasSuffix(rPath, "/") {
+		f, err := h.r.Open(rPath + "index.html")
+		if err == nil {
+			return &FileResponse{
+				File: f,
+			}
+		}
 	}
 
-	defer f.Close()
-
-	_, err = io.Copy(c, f)
-
+	f, err := h.r.Open(rPath)
 	if err != nil {
+		switch err.(type) {
+		case *os.PathError:
+			return &ErrorResponse{
+				Path: p,
+			}
+		}
+
+		return &ErrorResponse{
+			Path: p,
+			Err: err,
+		}
+	}
+
+	fsi, err := f.Stat()
+	if err != nil {
+		return &ErrorResponse{
+			Path: p,
+			Err: err,
+		}
+	} else {
+		if fsi.IsDir() {
+			return &DirResponse{
+				File: f,
+			}
+		} else {
+			return &FileResponse{
+				File: f,
+			}
+		}
+	}
+}
+
+func (h *Httpd) serveGet(c net.Conn, oPath string) error {
+	r := h.makeRequest(oPath)
+	if r != nil {
+		defer r.Close()
+		written, err := r.WriteTo(c)
+		log.Printf("wrote %d bytes", written)
 		return err
 	}
 
