@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 )
@@ -138,6 +139,18 @@ func (dr *DirResponse) WriteTo(w io.Writer) (int, error) {
 	return written, err
 }
 
+type ProxyResponse struct {
+	URL string
+	resp *http.Response
+}
+
+func (pr *ProxyResponse) Close() error { return nil }
+
+func (pr *ProxyResponse) WriteTo(w io.Writer) (int, error) {
+	sz, err := io.Copy(w, pr.resp.Body)
+	return int(sz), err
+}
+
 type ErrorResponse struct {
 	Path string
 	Err  error
@@ -158,8 +171,35 @@ type Response interface {
 	io.Closer
 }
 
+func (h *Httpd) proxyRequest(p string) Response {
+	rPath := strings.TrimLeft(p, "/p/")
+
+	components := strings.Split(rPath, "/")
+
+	url := "http://" + strings.Join(components, "/")
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return &ErrorResponse{
+			Path: p,
+			Err: err,
+		}
+	}
+
+	return &ProxyResponse{
+		URL: url,
+		resp: resp,
+	}
+}
+
 func (h *Httpd) makeRequest(p string) Response {
+	pathComponents := strings.Split(p, "/")
+	if len(pathComponents) > 2 && pathComponents[1] == "p" { // proxy request
+		return h.proxyRequest(p)
+	}
+
 	rPath := strings.TrimLeft(p, "/")
+
 	if rPath == "" || strings.HasSuffix(rPath, "/") {
 		f, err := h.r.Open(rPath + "index.html")
 		if err == nil {
