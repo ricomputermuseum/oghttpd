@@ -140,7 +140,7 @@ func (dr *DirResponse) WriteTo(w io.Writer) (int, error) {
 }
 
 type ProxyResponse struct {
-	URL string
+	URL  string
 	resp *http.Response
 }
 
@@ -172,7 +172,7 @@ type Response interface {
 }
 
 func (h *Httpd) proxyRequest(p string) Response {
-	rPath := strings.TrimLeft(p, "/p/")
+	rPath := strings.TrimPrefix(p, "/p/")
 
 	components := strings.Split(rPath, "/")
 
@@ -182,12 +182,12 @@ func (h *Httpd) proxyRequest(p string) Response {
 	if err != nil {
 		return &ErrorResponse{
 			Path: p,
-			Err: err,
+			Err:  err,
 		}
 	}
 
 	return &ProxyResponse{
-		URL: url,
+		URL:  url,
 		resp: resp,
 	}
 }
